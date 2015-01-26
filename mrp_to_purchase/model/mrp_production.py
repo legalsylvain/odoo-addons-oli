@@ -20,6 +20,8 @@
 #
 ##############################################################################
 
+from openerp import netsvc
+
 from openerp.osv.orm import Model
 from openerp.osv.osv import except_osv
 from openerp.tools.translate import _
@@ -69,9 +71,16 @@ class mrp_production(Model):
                     " view of the product.") % (
                         pro.product_id.name))
 
-            # Create a Purchase Order
+            # Create a Purchase Order and Validate it
             tmp = pro_obj.make_po(cr, uid, pro_ids, context=context)
             pur_ids.append(tmp[pro.id])
+            wf_service = netsvc.LocalService('workflow')
+            wf_service.trg_validate(
+                uid, 'purchase.order', tmp[pro.id], 'purchase_confirm', cr)
+
+            # TODO
+            # Si l'on valide le Purchase cela devrait mettre le procurement
+            # en "ready", cela n'est actuellement pas le cas.
 
         # Get Action to return to the Client
         iaaw_id = imd_obj.get_object_reference(

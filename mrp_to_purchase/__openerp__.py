@@ -46,14 +46,13 @@ Copyright, Authors and Licence:
     'website': 'http://www.grap.coop',
     'license': 'AGPL-3',
     'depends': [
-        'sale',
         'mrp',
         'purchase',
     ],
     'demo': [
         'demo/res_groups.yml',
-        'demo/product_product.yml',
         'demo/product_template.yml',
+        'demo/product_product.yml',
         'demo/product_supplierinfo.yml',
         'demo/mrp_bom.yml',
     ],

@@ -20,8 +20,20 @@
 #
 ##############################################################################
 
-- !record {model: product.product, id: product_to_make}:
-    product_tmpl_id: template_to_make
+- !record {model: product.template, id: template_to_make}:
+    name: Product Template To Make (Mrp To Purchase)
+    type: product
+    procure_method: make_to_order
+    supply_method: produce
+    sale_ok: True
+    purchase_ok: True
+    list_price: 100
 
-- !record {model: product.product, id: product_raw_material}:
-    product_tmpl_id: template_raw_material
+- !record {model: product.template, id: template_raw_material}:
+    name: Product Template Raw Material (Mrp To Purchase)
+    type: product
+    procure_method: make_to_order
+    supply_method: buy
+    sale_ok: True
+    purchase_ok: True
+    list_price: 0
