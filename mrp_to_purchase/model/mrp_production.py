@@ -105,12 +105,8 @@ class mrp_production(Model):
             # Cancel Production Order
             self.action_cancel(cr, uid, [mp.id], context=context)
 
-            # Create a Purchase Order by the classic process
-            pur_id = proc_obj.make_po(
-                cr, uid, [proc.id], context=context)[proc.id]
-
-            # Set the Procurement in the correct state: 
-            # from 'produce' to 'buy' with the correct subworkflow
+            # Set the Procurement in the correct state:
+            # from 'produce' to 'confirm'
             act_produce_id = imd_obj.get_object_reference(
                 cr, uid, 'mrp', 'act_produce')[1]
             act_confirm_id = imd_obj.get_object_reference(
@@ -125,22 +121,16 @@ class mrp_production(Model):
                 AND act_id = %s;
                 """, (proc.id, act_produce_id))
             proc_item_id = cr.fetchone()[0]
-#            import pdb; pdb.set_trace()
-            cr.execute("""
-                SELECT id
-                FROM wkf_workitem
-                WHERE inst_id = (
-                    SELECT id
-                    FROM wkf_instance
-                    WHERE res_id = %s
-                    AND res_type = 'purchase.order'
-                );
-                """ % (int(pur_id)))
-            pur_item_id = cr.fetchone()[0]
             cr.execute("""
                 UPDATE wkf_workitem
-                SET subflow_id = %s, act_id = %s
-                WHERE id = %s""", (pur_item_id, act_confirm_id, proc_item_id))
+                SET subflow_id = Null, state='complete', act_id = %s
+                WHERE id = %s""", (act_confirm_id, proc_item_id))
+
+            proc_obj.write(cr, uid, [proc.id], {
+                'state': 'confirmed'}, context=context)
+            # Create a Purchase Order by the classic process
+            pur_id = proc_obj.make_po(
+                cr, uid, [proc.id], context=context)[proc.id]
 
             pur_ids.append(pur_id)
 
