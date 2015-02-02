@@ -22,8 +22,10 @@
 
 - !record {model: product.product, id: product_to_make}:
     product_tmpl_id: template_to_make
+    supply_method: produce
     procure_method: make_to_order
 
 - !record {model: product.product, id: product_raw_material}:
     product_tmpl_id: template_raw_material
     procure_method: make_to_order
+    supply_method: buy

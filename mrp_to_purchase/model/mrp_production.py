@@ -43,6 +43,12 @@ class mrp_production(Model):
         pur_ids = []
 
         for mp in self.browse(cr, uid, ids, context=context):
+            print "********************"
+            print "mp.move_created_ids"
+            print mp.move_created_ids
+            print "mp.move_lines"
+            print mp.move_lines
+
             # Check that the production is not running
             if mp.state not in ('draft', 'confirmed'):
                 raise except_osv(_('Error: Incorrect State!'), _(
@@ -62,6 +68,9 @@ class mrp_production(Model):
                     " simply cancel this Production Order and create a"
                     "Purchase Order.") % (mp.name))
             pro = pro_obj.browse(cr, uid, pro_ids[0], context=context)
+            print "********************"
+            print "pro.move_id"
+            print pro.move_id
 
             # Check that product has a Seller defined
             if not pro.product_id.seller_id:
@@ -71,16 +80,23 @@ class mrp_production(Model):
                     " view of the product.") % (
                         pro.product_id.name))
 
-            # Create a Purchase Order and Validate it
-            tmp = pro_obj.make_po(cr, uid, pro_ids, context=context)
+            # Create a Purchase Order
+            tmp = pro_obj.make_po(cr, uid, [pro.id], context=context)
             pur_ids.append(tmp[pro.id])
-            wf_service = netsvc.LocalService('workflow')
-            wf_service.trg_validate(
-                uid, 'purchase.order', tmp[pro.id], 'purchase_confirm', cr)
+            pur = self.pool['purchase.order'].browse(
+                cr, uid, tmp[pro.id], context=context)
+            print "********************"
+            print "pur.order_line[0].dest_move_id"
+            print pur.order_line[0].dest_move_id
 
             # TODO
             # Si l'on valide le Purchase cela devrait mettre le procurement
             # en "ready", cela n'est actuellement pas le cas.
+
+            # TODO
+            # Cancel Production Order
+            print "********************"
+            print pro.move_id
 
         # Get Action to return to the Client
         iaaw_id = imd_obj.get_object_reference(
@@ -96,3 +112,7 @@ class mrp_production(Model):
             res['res_id'] = pur_ids[0]
 
         return res
+
+#            wf_service = netsvc.LocalService('workflow')
+#            wf_service.trg_validate(
+#                uid, 'purchase.order', tmp[pro.id], 'purchase_confirm', cr)
