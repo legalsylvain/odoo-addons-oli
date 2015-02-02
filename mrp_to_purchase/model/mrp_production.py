@@ -39,11 +39,9 @@ class mrp_production(Model):
 
         wf_service = netsvc.LocalService('workflow')
         sm_obj = self.pool['stock.move']
-        sp_obj = self.pool['stock.picking']
         proc_obj = self.pool['procurement.order']
         imd_obj = self.pool['ir.model.data']
         iaaw_obj = self.pool['ir.actions.act_window']
-        purl_obj = self.pool['purchase.order.line']
 
         pur_ids = []
 
@@ -67,7 +65,6 @@ class mrp_production(Model):
                     " simply cancel this Production Order and create a"
                     "Purchase Order.") % (mp.name))
             proc = proc_obj.browse(cr, uid, proc_ids[0], context=context)
-            good_move_id = proc.move_id.id
 
             # Check that product has a Seller defined
             if not proc.product_id.seller_id:
