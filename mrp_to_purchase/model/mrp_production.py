@@ -36,19 +36,18 @@ class mrp_production(Model):
         associated to Procurement and returns an action that display new
         Purchase Orders.
         """
-        pro_obj = self.pool['procurement.order']
+
+        wf_service = netsvc.LocalService('workflow')
+        sm_obj = self.pool['stock.move']
+        sp_obj = self.pool['stock.picking']
+        proc_obj = self.pool['procurement.order']
         imd_obj = self.pool['ir.model.data']
         iaaw_obj = self.pool['ir.actions.act_window']
+        purl_obj = self.pool['purchase.order.line']
 
         pur_ids = []
 
         for mp in self.browse(cr, uid, ids, context=context):
-            print "********************"
-            print "mp.move_created_ids"
-            print mp.move_created_ids
-            print "mp.move_lines"
-            print mp.move_lines
-
             # Check that the production is not running
             if mp.state not in ('draft', 'confirmed'):
                 raise except_osv(_('Error: Incorrect State!'), _(
@@ -58,45 +57,92 @@ class mrp_production(Model):
                         mp.name))
 
             # Get Procurement Order that has generated the Production Order
-            pro_ids = pro_obj.search(cr, uid, [
+            proc_ids = proc_obj.search(cr, uid, [
                 ('production_id', '=', mp.id),
             ], context=context)
-            if len(pro_ids) != 1:
+            if len(proc_ids) != 1:
                 raise except_osv(_('Error: Procurement Not Found!'), _(
                     "The associated Procurement Order has not be found for"
                     " the Manufacturing Order %s.\n In that case, please"
                     " simply cancel this Production Order and create a"
                     "Purchase Order.") % (mp.name))
-            pro = pro_obj.browse(cr, uid, pro_ids[0], context=context)
-            print "********************"
-            print "pro.move_id"
-            print pro.move_id
+            proc = proc_obj.browse(cr, uid, proc_ids[0], context=context)
+            good_move_id = proc.move_id.id
 
             # Check that product has a Seller defined
-            if not pro.product_id.seller_id:
+            if not proc.product_id.seller_id:
                 raise except_osv(_('Error: Seller Not Found!'), _(
                     "The product %s has no Seller associated. Please"
                     " associate a Seller to this product in the procurement"
                     " view of the product.") % (
-                        pro.product_id.name))
+                        proc.product_id.name))
 
-            # Create a Purchase Order
-            tmp = pro_obj.make_po(cr, uid, [pro.id], context=context)
-            pur_ids.append(tmp[pro.id])
-            pur = self.pool['purchase.order'].browse(
-                cr, uid, tmp[pro.id], context=context)
-            print "********************"
-            print "pur.order_line[0].dest_move_id"
-            print pur.order_line[0].dest_move_id
+            # Unlink the production_id from the Procurement Order to avoid
+            # that cancel mrp.production impact the initial Procurement Order
+            proc_obj.write(cr, uid, [proc.id], {
+                'production_id': False}, context=context)
 
-            # TODO
-            # Si l'on valide le Purchase cela devrait mettre le procurement
-            # en "ready", cela n'est actuellement pas le cas.
+            # Unlink the move_prod_id from the Production Order to avoid
+            # that cancel mrp.production impact the good Stock Move
+            self.write(cr, uid, [mp.id], {
+                'move_prod_id': False}, context=context)
 
-            # TODO
+            # Get moves associated to the picking to unlink
+            sm_ids_extra = sm_obj.search(cr, uid, [
+                ('picking_id', '=', mp.picking_id.id)], context=context)
+
+            # Get Extra Procurement Order to Cancel
+            proc_ids_to_cancel = proc_obj.search(cr, uid, [
+                ('move_id', 'in', sm_ids_extra)], context=context)
+
+            proc_obj.action_cancel(
+                cr, uid, proc_ids_to_cancel)
+
+            # Cancel Picking associated to the mrp.production
+            wf_service.trg_validate(
+                uid, 'stock.picking', mp.picking_id.id, 'button_cancel', cr)
+
             # Cancel Production Order
-            print "********************"
-            print pro.move_id
+            self.action_cancel(cr, uid, [mp.id], context=context)
+
+            # Create a Purchase Order by the classic process
+            pur_id = proc_obj.make_po(
+                cr, uid, [proc.id], context=context)[proc.id]
+
+            # Set the Procurement in the correct state: 
+            # from 'produce' to 'buy' with the correct subworkflow
+            act_produce_id = imd_obj.get_object_reference(
+                cr, uid, 'mrp', 'act_produce')[1]
+            act_confirm_id = imd_obj.get_object_reference(
+                cr, uid, 'procurement', 'act_confirm')[1]
+            cr.execute("""
+                SELECT id
+                FROM wkf_workitem
+                WHERE inst_id = (
+                    SELECT id
+                    FROM wkf_instance
+                    WHERE res_id = %s)
+                AND act_id = %s;
+                """, (proc.id, act_produce_id))
+            proc_item_id = cr.fetchone()[0]
+#            import pdb; pdb.set_trace()
+            cr.execute("""
+                SELECT id
+                FROM wkf_workitem
+                WHERE inst_id = (
+                    SELECT id
+                    FROM wkf_instance
+                    WHERE res_id = %s
+                    AND res_type = 'purchase.order'
+                );
+                """ % (int(pur_id)))
+            pur_item_id = cr.fetchone()[0]
+            cr.execute("""
+                UPDATE wkf_workitem
+                SET subflow_id = %s, act_id = %s
+                WHERE id = %s""", (pur_item_id, act_confirm_id, proc_item_id))
+
+            pur_ids.append(pur_id)
 
         # Get Action to return to the Client
         iaaw_id = imd_obj.get_object_reference(
@@ -112,7 +158,3 @@ class mrp_production(Model):
             res['res_id'] = pur_ids[0]
 
         return res
-
-#            wf_service = netsvc.LocalService('workflow')
-#            wf_service.trg_validate(
-#                uid, 'purchase.order', tmp[pro.id], 'purchase_confirm', cr)
